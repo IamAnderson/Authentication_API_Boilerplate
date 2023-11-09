@@ -1,0 +1,4 @@
+   "watch": ["src"],
+   "include": ["src/**/*"],
+
+   npm i typescript ts-node express prisma @prisma/client http lodash mongoose cookie-parser compression body-parser nodemon cors @types/cors @types/express @types/cookie-parser @types/compression @types/lodash
