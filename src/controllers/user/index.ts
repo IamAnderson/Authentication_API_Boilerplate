@@ -16,6 +16,16 @@ export const getUsers = async (req: Request, res: Response) => {
 
 export const getUser = async (req: Request, res: Response) => {
   try {
+    const existingUser = await prismadb.user.findUnique({
+        where: {
+            id: req.params.id
+        }
+    });
+
+    if(!existingUser){
+        return res.status(403).json({ message: "User does not exists" }).end();
+    }
+
     const user = await prismadb.user.findUnique({
       where: {
         id: req.params?.id,
@@ -33,6 +43,16 @@ export const getUser = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
+    const existingUser = await prismadb.user.findUnique({
+        where: {
+            id: req.params.id
+        }
+    });
+
+    if(!existingUser){
+        return res.status(403).json({ message: "User does not exists" }).end();
+    }
+
     const user = await prismadb.user.update({
       where: {
         id: req.params?.id,
@@ -51,6 +71,15 @@ export const updateUser = async (req: Request, res: Response) => {
 
 export const deleteUser = async (req: Request, res: Response) => {
   try {
+    const existingUser = await prismadb.user.findUnique({
+        where: {
+            id: req.params.id
+        }
+    });
+
+    if(!existingUser){
+        return res.status(403).json({ message: "User does not exists" }).end();
+    }
 
     const user = await prismadb.user.delete({
         where: {
