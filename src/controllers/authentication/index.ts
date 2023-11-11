@@ -31,8 +31,8 @@ export const login = async(req: Request, res: Response) => {
             return res?.status(401).json({ message: "Invalid Password" }).end();
         };
 
-        const access_token = jwt.sign({email: user.email}, process.env.JWT_SECRET, {expiresIn: "2 days"});
-        const refresh_token = jwt.sign({email: user.email}, process.env.JWT_SECRET, {expiresIn: "2 days"});
+        const access_token = jwt.sign({email: user.email, id: user?.id, userType: user?.userType}, process.env.JWT_SECRET, {expiresIn: "2 days"});
+        const refresh_token = jwt.sign({email: user.email, id: user?.id, userType: user?.userType}, process.env.JWT_SECRET, {expiresIn: "3 days"});
 
         return res.status(200).json({status: "success", message: null, data: {...user, access_token, refresh_token}});
 
@@ -73,7 +73,7 @@ export const register = async(req: Request, res: Response) => {
             data: {
                 name,
                 email,
-                hashedPassword
+                hashedPassword,
             }
         });
         

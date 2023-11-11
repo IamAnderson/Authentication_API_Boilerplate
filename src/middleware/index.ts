@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken"
-import { get } from "lodash";
 
-export const isOwner = async (req: Request, res: Response, next: NextFunction) => {
+export const isOwner = (req: Request, res: Response, next: NextFunction) => {
     try {
         const authHeader = req.headers.token as string;
 
@@ -13,10 +12,12 @@ export const isOwner = async (req: Request, res: Response, next: NextFunction) =
                     return res.status(401).json({ message: "Invalid Token" }).end();
                 };
 
-                return user
+                req.user = user;
+                //req.user is a param created by jwt token to save user in a middleware 
+                // console.log({REQ: req.user});
             })
         }else{
-            return res.status(401).json({ message: "Invalid Authentication" }).end();
+            return res.status(403).json({ message: "Null Token" }).end();
         };
 
         next();
@@ -27,11 +28,37 @@ export const isOwner = async (req: Request, res: Response, next: NextFunction) =
     }
 };
 
-// export const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
-//     try {
+export const isAuthorized = (req: Request, res: Response, next: NextFunction) => {
+    try {
+        isOwner(req, res, () => {
+            //@ts-ignore
+            if(req.user?.id || req.user?.userType === "admin"){
+                next();
+            }else{
+                return res.status(401).json({ message: "Invalid Authentication" }).end();
+            }
+        });
         
-//     } catch (error) {
-//         console.log({ error_server: error });
-//         res.status(500).end();
-//     }
-// };
+    } catch (error) {
+        console.log({ error_server: error });
+        res.status(500).end();
+    }
+};
+
+export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
+    try {
+        isOwner(req, res, () => {
+            //@ts-ignore
+            if(req.user?.userType === "admin"){
+                next();
+            }else{
+                console.log(req.params?.id)
+                return res.status(403).json({ message: "Not Authorized" }).end();
+            }
+        });
+        
+    } catch (error) {
+        console.log({ error_server: error });
+        res.status(500).end();
+    }
+};
