@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prismadb } from "../../../src/index";
+import { without } from "lodash";
 
 export const addFavorite = async (req: Request, res: Response) => {
   const { movieId } = req.body;
@@ -11,12 +12,13 @@ export const addFavorite = async (req: Request, res: Response) => {
     });
 
     if (!existingMovie) {
-      return res.status(404).json({ message: "Movie does not exist" });
+      return res.status(404).json({ message: "Invalid ID" });
     }
 
-    const movie = prismadb.user.update({
+    await prismadb.user.update({
       where: {
-        email: req.body
+        //@ts-ignore
+        id: req.user?.id,
       },
       data: {
         favoriteIds: {
@@ -25,8 +27,9 @@ export const addFavorite = async (req: Request, res: Response) => {
       },
     });
 
-    return res.status(200).json({ status: "success", message: null, data: movie });
-
+    return res
+      .status(200)
+      .json({ status: "success", message: null, data: `${movieId} has been added to favorite` });
   } catch (error) {
     console.log({ err_server: error });
     return res.status(500).end();
@@ -35,26 +38,67 @@ export const addFavorite = async (req: Request, res: Response) => {
 
 export const getFavorites = async (req: Request, res: Response) => {
   try {
-    const user = prismadb.user.findUnique({
-        where: {
-            //@ts-ignore
-            id: req.user?.id
-        }
+    const user = await prismadb.user.findUnique({
+      where: {
+        //@ts-ignore
+        id: req.user?.id,
+      },
     });
 
-    console.log(req?.user)
-
-    const favorites = prismadb.movie.findMany({
-        where: {
-            id: {
-                //@ts-ignore
-                in: user?.favoriteIds
-            }
-        }
+    const favorites = await prismadb.movie.findMany({
+      where: {
+        id: {
+          //@ts-ignore
+          in: user?.favoriteIds,
+        },
+      },
     });
 
-    return res.status(200).json({ status: "success", message: null, data: favorites });
+    return res
+      .status(200)
+      .json({ status: "success", message: null, data: favorites });
+  } catch (error) {
+    console.log({ err_server: error });
+    return res.status(500).end();
+  }
+};
 
+export const deleteFavorite = async (req: Request, res: Response) => {
+  const { movieId } = req.body;
+
+  try {
+    const existingMovie = await prismadb.movie.findUnique({
+      where: {
+        id: movieId,
+      },
+    });
+
+    if (!existingMovie) {
+      return res.status(404).json({ message: "Invalid ID" });
+    }
+
+    const user = await prismadb.user.findUnique({
+      where: {
+        //@ts-ignore
+        id: req.user?.id,
+      },
+    });
+
+    const favoriteIds = without(user?.favoriteIds, movieId)
+    // const favoriteIds = user?.favoriteIds?.filter((id) => id === movieId);
+
+    await prismadb.user.update({
+      where: {
+        id: user?.id,
+      },
+      data: {
+        favoriteIds: favoriteIds,
+      },
+    });
+
+    return res
+      .status(200)
+      .json({ status: "success", message: null, data: `${movieId} has been removed from favorite` });
   } catch (error) {
     console.log({ err_server: error });
     return res.status(500).end();
