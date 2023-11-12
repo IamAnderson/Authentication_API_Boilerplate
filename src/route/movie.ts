@@ -1,6 +1,6 @@
 import express from "express";
-import { addMovie, getMovies, getMovie, updateMovie, deleteMovie , randomMovie} from "../controllers/movie";
-// import { randomMovie } from "../controllers/random";
+import { addMovie, getMovies, getMovie, updateMovie, deleteMovie } from "../controllers/movie";
+import { randomMovie } from "../controllers/movie";
 import { isAdmin, isAuthorized } from "../middleware";
 
 
@@ -11,4 +11,5 @@ export default (router: express.Router) => {
     router.patch("/movies/:id", isAdmin, updateMovie);
     router.delete("/movies/:id", isAdmin, deleteMovie);
     router.get("/movies/random", isAuthorized, randomMovie);
+
 }

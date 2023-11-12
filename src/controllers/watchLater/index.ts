@@ -2,8 +2,9 @@ import { Request, Response } from "express";
 import { prismadb } from "../../../src/index";
 import { without } from "lodash";
 
-export const addFavorite = async (req: Request, res: Response) => {
+export const addWatchLater = async (req: Request, res: Response) => {
   const { movieId } = req.body;
+
   try {
     const existingMovie = await prismadb.movie.findUnique({
       where: {
@@ -12,60 +13,63 @@ export const addFavorite = async (req: Request, res: Response) => {
     });
 
     if (!existingMovie) {
-      return res.status(404).json({ message: "Invalid ID" });
+      return res.status(404).json({ message: "Movie does not exist" }).end();
     }
 
     await prismadb.user.update({
       where: {
         //@ts-ignore
-        id: req.user?.id,
+        id: req?.user?.id,
       },
       data: {
-        favoriteIds: {
+        watchLaterIds: {
           push: movieId,
         },
       },
     });
 
-    return res
-      .status(200)
-      .json({ status: "success", message: null, data: `${movieId} has been added to favorite` });
+    return res.status(200).json({
+      status: "success",
+      message: null,
+      data: `${movieId} has been added to watchLater`,
+    });
   } catch (error) {
     console.log({ err_server: error });
     return res.status(500).end();
   }
 };
 
-export const getFavorites = async (req: Request, res: Response) => {
+export const getWatchLater = async (req: Request, res: Response) => {
+  const { movieId } = req.body;
+
   try {
     const user = await prismadb.user.findUnique({
       where: {
         //@ts-ignore
-        id: req.user?.id,
+        id: req?.user?.id,
       },
     });
 
-    const favorites = await prismadb.movie.findMany({
+    const watchLater = await prismadb.movie.findMany({
       where: {
         id: {
-          //@ts-ignore
-          in: user?.favoriteIds,
+          in: user?.watchLaterIds,
         },
       },
     });
 
     return res
       .status(200)
-      .json({ status: "success", message: null, data: favorites });
+      .json({ status: "success", message: null, data: watchLater });
   } catch (error) {
     console.log({ err_server: error });
     return res.status(500).end();
   }
 };
 
-export const deleteFavorite = async (req: Request, res: Response) => {
+export const deleteWatchLater = async (req: Request, res: Response) => {
   const movieId = req.params?.id;
-  
+
   try {
     const existingMovie = await prismadb.movie.findUnique({
       where: {
@@ -74,31 +78,33 @@ export const deleteFavorite = async (req: Request, res: Response) => {
     });
 
     if (!existingMovie) {
-      return res.status(404).json({ message: "Invalid ID" });
+      return res.status(404).json({ message: "Movie does not exist" }).end();
     }
 
     const user = await prismadb.user.findUnique({
       where: {
         //@ts-ignore
-        id: req.user?.id,
+        id: req?.user?.id,
       },
     });
 
-    const favoriteIds = without(user?.favoriteIds, movieId)
-    // const favoriteIds = user?.favoriteIds?.filter((id) => id === movieId);
+    const watchLaterIds = without(user?.watchLaterIds, movieId);
 
     await prismadb.user.update({
       where: {
-        id: user?.id,
+        //@ts-ignore
+        id: req?.user?.id,
       },
       data: {
-        favoriteIds: favoriteIds,
+        watchLaterIds: watchLaterIds,
       },
     });
 
-    return res
-      .status(200)
-      .json({ status: "success", message: null, data: `${movieId} has been removed from favorite` });
+    return res.status(200).json({
+      status: "success",
+      message: null,
+      data: `${movieId} has been removed from Watch Later`,
+    });
   } catch (error) {
     console.log({ err_server: error });
     return res.status(500).end();
