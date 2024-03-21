@@ -1,98 +1,84 @@
 import { Request, Response } from "express";
 import { prismadb } from "../../../src/index";
 
+const handleServerError = (error: any, res: Response) => {
+  console.error({ error_server: error });
+  res.status(500).end();
+};
+
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const users = await prismadb.user.findMany();
-
-    return res
-      .status(200)
-      .json({ status: "success", message: null, data: users });
+    res.status(200).json({ status: "success", message: null, data: users });
   } catch (error) {
-    console.log({ error_server: error });
-    res.status(500).end();
+    handleServerError(error, res);
   }
 };
 
 export const getUser = async (req: Request, res: Response) => {
   try {
-    const existingUser = await prismadb.user.findUnique({
-        where: {
-            id: req.params.id
-        }
+    const userId = req.params.id;
+    const user = await prismadb.user.findUnique({
+      where: { id: userId },
     });
 
-    if(!existingUser){
-        return res.status(403).json({ message: "User does not exists" }).end();
+    if (!user) {
+      return res.status(404).json({ message: "User does not exist" }).end();
     }
 
-    const user = await prismadb.user.findUnique({
-      where: {
-        id: req.params?.id,
-      },
-    });
-
-    return res
-      .status(200)
-      .json({ status: "success", message: null, data: user });
+    res.status(200).json({ status: "success", message: null, data: user });
   } catch (error) {
-    console.log({ error_server: error });
-    res.status(500).end();
+    handleServerError(error, res);
   }
 };
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
+    const userId = req.params.id;
     const existingUser = await prismadb.user.findUnique({
-        where: {
-            id: req.params.id
-        }
+      where: { id: userId },
     });
 
-    if(!existingUser){
-        return res.status(403).json({ message: "User does not exists" }).end();
+    if (!existingUser) {
+      return res.status(404).json({ message: "User does not exist" }).end();
     }
 
-    const user = await prismadb.user.update({
-      where: {
-        id: req.params?.id,
-      },
+    const updatedUser = await prismadb.user.update({
+      where: { id: userId },
       data: req.body,
     });
 
-    return res
+    res
       .status(200)
-      .json({ status: "success", message: null, data: user });
+      .json({ status: "success", message: null, data: updatedUser });
   } catch (error) {
-    console.log({ error_server: error });
-    res.status(500).end();
+    handleServerError(error, res);
   }
 };
 
 export const deleteUser = async (req: Request, res: Response) => {
   try {
+    const userId = req.params.id;
     const existingUser = await prismadb.user.findUnique({
-        where: {
-            id: req.params.id
-        }
+      where: { id: userId },
     });
 
-    if(!existingUser){
-        return res.status(403).json({ message: "User does not exists" }).end();
+    if (!existingUser) {
+      return res.status(404).json({ message: "User does not exist" }).end();
     }
 
-    const user = await prismadb.user.delete({
-        where: {
-            id: req.params?.id
-        }
+    await prismadb.user.delete({
+      where: { id: userId },
     });
 
-    return res
-    .status(200)
-    .json({ status: "success", message: null, data: `${user?.id} has been deleted` });
-
+    res
+      .status(200)
+      .json({
+        status: "success",
+        message: null,
+        data: `${userId} has been deleted`,
+      });
   } catch (error) {
-    console.log({ error_server: error });
-    res.status(500).end();
+    handleServerError(error, res);
   }
 };
