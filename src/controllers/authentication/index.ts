@@ -9,7 +9,7 @@ import { validatePassword } from "../../hooks/validate-password";
 
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password }: { email: string; password: string; } = req.body;
+    const { email, password }: { email: string; password: string } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: "Invalid Credentials" });
@@ -41,13 +41,23 @@ export async function login(req: Request, res: Response) {
     }
 
     // In Case account have not been verified;
+    //Commented out because next-auth can't process this response,
+    //it would work in normal authentication though, so for now, handle email verification in frontend.
+
+    // if (!existingUser?.emailVerified) {
+    //   const verificationToken = await generateVerificationToken(email);
+
+    //   await sendVerificationEmail(existingUser.email, verificationToken.token);
+    //   return res.status(200).json({
+    //     status: "success",
+    //     emailVerified: false,
+    //     message: "Confirmation email sent!",
+    //   });
+    // }
+
     if (!existingUser?.emailVerified) {
       const verificationToken = await generateVerificationToken(email);
-
       await sendVerificationEmail(existingUser.email, verificationToken.token);
-     return res
-        .status(200)
-        .json({ status: "success", emailVerified: false, message: "Confirmation email sent!" });
     }
 
     const access_token = jwt.sign(
@@ -73,18 +83,78 @@ export async function login(req: Request, res: Response) {
     await prismadb.user.update({
       data: {
         access_token,
-      }, where: {
-        id: existingUser.id
-      }
-    })
+      },
+      where: {
+        id: existingUser.id,
+      },
+    });
 
     return res.status(200).json({
       status: "success",
+      message: `${!existingUser.emailVerified && "Confirmation email sent!"}`,
       refresh_token,
       data: { ...existingUser },
     });
   } catch (error) {
     console.log("[LOGIN]:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function account(req: Request, res: Response) {
+  try {
+    const {
+      userId,
+      type,
+      provider,
+      providerAccountId,
+      refresh_token,
+      access_token,
+      expires_at,
+      token_type,
+      scope,
+      id_token,
+      session_state,
+    }: {
+      userId: string;
+      type: string;
+      provider: string;
+      providerAccountId: string;
+      refresh_token?: string;
+      access_token?: string;
+      expires_at?: number;
+      token_type?: string;
+      scope?: string;
+      id_token?: string;
+      session_state?: string;
+    } = req.body;
+
+    if (!type || !provider || !providerAccountId) {
+      return res.status(400).json({ message: "Invalid field" });
+    }
+    
+    const oauthAccount = await prismadb.account.create({
+      data: {
+        userId,
+        type,
+        provider,
+        providerAccountId,
+        refresh_token,
+        access_token,
+        expires_at,
+        token_type,
+        scope,
+        id_token,
+        session_state,
+      },
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data: { ...oauthAccount },
+    });
+  } catch (error) {
+    console.log("[ACCOUNT]:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
@@ -99,13 +169,13 @@ export async function register(req: Request, res: Response) {
 
     const isEmailValid = validateEmail(email);
 
-    if(!isEmailValid) {
+    if (!isEmailValid) {
       return res.status(400).json({ message: "Invalid email address!" });
     }
 
     const isPasswordValid = validatePassword(password, res);
 
-    if(!isPasswordValid) {
+    if (!isPasswordValid) {
       return res.status(200).json("Invalid Password");
     }
 
@@ -148,8 +218,8 @@ export async function verifyEmail(req: Request, res: Response) {
   try {
     const { code }: { code: string } = req.body;
 
-    if (!code || typeof code !== 'string') {
-      return res.status(400).json({ message: 'Invalid verification code' });
+    if (!code || typeof code !== "string") {
+      return res.status(400).json({ message: "Invalid verification code" });
     }
 
     const existingToken = await prismadb.verificationToken.findUnique({
@@ -174,7 +244,7 @@ export async function verifyEmail(req: Request, res: Response) {
       },
     });
 
-  await prismadb.user.update({
+    await prismadb.user.update({
       where: {
         id: existingUser.id,
       },
@@ -191,7 +261,9 @@ export async function verifyEmail(req: Request, res: Response) {
       },
     });
 
-    return res.status(200).json({ status: "success", message: "Email verified!" });
+    return res
+      .status(200)
+      .json({ status: "success", message: "Email verified!" });
   } catch (error) {
     console.log("[VERIFY_EMAIL]:", error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -200,10 +272,10 @@ export async function verifyEmail(req: Request, res: Response) {
 
 export async function resendEmailVerification(req: Request, res: Response) {
   try {
-    const { email }: { email: string; } = req.body;
+    const { email }: { email: string } = req.body;
 
-    if (!email || typeof email !== 'string') {
-      return res.status(400).json({ message: 'Invalid field' });
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ message: "Invalid field" });
     }
 
     const existingUser = await prismadb.user.findUnique({
@@ -225,7 +297,9 @@ export async function resendEmailVerification(req: Request, res: Response) {
       verificationToken?.token
     );
 
-    return res.status(200).json({ status: "success", message: "Verification email sent!" })
+    return res
+      .status(200)
+      .json({ status: "success", message: "Verification email sent!" });
   } catch (error) {
     console.log("[RESEND_VERIFICATION_EMAIL]:", error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -234,11 +308,10 @@ export async function resendEmailVerification(req: Request, res: Response) {
 
 export async function forgotPassword(req: Request, res: Response) {
   try {
-    const { email }: { email: string; } = req.body;
+    const { email }: { email: string } = req.body;
 
-    
-    if (!email || typeof email !== 'string') {
-      return res.status(400).json({ message: 'Invalid field' });
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ message: "Invalid field" });
     }
 
     const existingUser = await prismadb.user.findUnique({
@@ -269,7 +342,12 @@ export async function forgotPassword(req: Request, res: Response) {
 
 export async function resetPassword(req: Request, res: Response) {
   try {
-    const { code, password, password_confirmation }: { code: string; password: string; password_confirmation: string; } = req.body;
+    const {
+      code,
+      password,
+      password_confirmation,
+    }: { code: string; password: string; password_confirmation: string } =
+      req.body;
 
     if (!password || !password_confirmation || !code) {
       return res.status(400).json({ message: "Invalid field!" });
@@ -307,10 +385,11 @@ export async function resetPassword(req: Request, res: Response) {
       },
     });
 
-    await prismadb.passwordResetToken.delete({where: {
+    await prismadb.passwordResetToken.delete({
+      where: {
         token: existingToken.token,
-      }
-    })
+      },
+    });
 
     return res.status(200).json({
       status: "success",
@@ -327,7 +406,7 @@ export async function refreshAccessToken(req: Request, res: Response) {
     const { refresh_token } = req.body;
 
     if (!refresh_token) {
-      return res.status(401).json({ message: 'Refresh token is required' });
+      return res.status(401).json({ message: "Refresh token is required" });
     }
 
     // Verify the refresh token
@@ -335,7 +414,7 @@ export async function refreshAccessToken(req: Request, res: Response) {
     try {
       payload = jwt.verify(refresh_token, process.env.JWT_SECRET);
     } catch (err) {
-      return res.status(403).json({ message: 'Invalid refresh token' });
+      return res.status(403).json({ message: "Invalid refresh token" });
     }
 
     // Check if the refresh token is still valid
@@ -346,7 +425,7 @@ export async function refreshAccessToken(req: Request, res: Response) {
     });
 
     if (!existingUser) {
-      return res.status(401).json({ message: 'User not found' });
+      return res.status(401).json({ message: "User not found" });
     }
 
     // Generate a new access token
@@ -357,20 +436,23 @@ export async function refreshAccessToken(req: Request, res: Response) {
         role: existingUser.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: "1h" }
     );
 
     await prismadb.user.update({
       data: {
         access_token,
-      }, where: {
+      },
+      where: {
         id: existingUser.id,
-      }
-    })
+      },
+    });
 
-    return res.status(200).json({ status: "success", message: "Access token refreshed!" });
+    return res
+      .status(200)
+      .json({ status: "success", message: "Access token refreshed!" });
   } catch (error) {
-    console.log('[REFRESH_ACCESS_TOKEN]:', error);
+    console.log("[REFRESH_ACCESS_TOKEN]:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
