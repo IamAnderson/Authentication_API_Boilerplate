@@ -4,10 +4,12 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { generatePasswordResetToken, generateVerificationToken } from "./token";
 import { sendPasswordResetEmail, sendVerificationEmail } from "./mail";
+import { validateEmail } from "../../hooks/validate-email";
+import { validatePassword } from "../../hooks/validate-password";
 
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body;
+    const { email, password }: { email: string; password: string; } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: "Invalid Credentials" });
@@ -16,7 +18,7 @@ export async function login(req: Request, res: Response) {
     if (password?.length < 7) {
       return res
         .status(400)
-        .json({ message: "Password should be at least 8 values" });
+        .json({ message: "Password should be at least 8 characters" });
     }
 
     const existingUser = await prismadb.user.findUnique({
@@ -26,7 +28,7 @@ export async function login(req: Request, res: Response) {
     });
 
     if (!existingUser || !existingUser?.email) {
-      return res.status(404).json({ message: "Nonexistent User!" }).end();
+      return res.status(404).json({ message: "Nonexistent User!" });
     }
 
     const comparePassword = await bcrypt.compare(
@@ -35,24 +37,27 @@ export async function login(req: Request, res: Response) {
     );
 
     if (!comparePassword) {
-      return res?.status(401).json({ message: "Invalid Password" }).end();
+      return res?.status(401).json({ message: "Invalid Password" });
     }
 
+    // In Case account have not been verified;
     if (!existingUser?.emailVerified) {
-      await generateVerificationToken(email);
-      return res
+      const verificationToken = await generateVerificationToken(email);
+
+      await sendVerificationEmail(existingUser.email, verificationToken.token);
+     return res
         .status(200)
-        .json({ status: "success", message: "Confirmation email sent!" });
+        .json({ status: "success", emailVerified: false, message: "Confirmation email sent!" });
     }
 
     const access_token = jwt.sign(
       {
         email: existingUser.email,
-        id: existingUser?.id,
-        role: existingUser?.role,
+        id: existingUser.id,
+        role: existingUser.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "3 days" }
+      { expiresIn: "1hr" }
     );
 
     const refresh_token = jwt.sign(
@@ -62,18 +67,25 @@ export async function login(req: Request, res: Response) {
         role: existingUser?.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "3 days" }
+      { expiresIn: "30d" }
     );
+
+    await prismadb.user.update({
+      data: {
+        access_token,
+      }, where: {
+        id: existingUser.id
+      }
+    })
 
     return res.status(200).json({
       status: "success",
-      access_token,
       refresh_token,
       data: { ...existingUser },
     });
   } catch (error) {
     console.log("[LOGIN]:", error);
-    res.status(500).end();
+    res.status(500).json({ message: "Internal Server Error" });
   }
 }
 
@@ -85,10 +97,16 @@ export async function register(req: Request, res: Response) {
       return res.status(400).json({ message: "Fill in credentials!" });
     }
 
-    if (password?.length < 7) {
-      return res
-        .status(400)
-        .json({ message: "Password should be at least 8 values" });
+    const isEmailValid = validateEmail(email);
+
+    if(!isEmailValid) {
+      return res.status(400).json({ message: "Invalid email address!" });
+    }
+
+    const isPasswordValid = validatePassword(password, res);
+
+    if(!isPasswordValid) {
+      return res.status(200).json("Invalid Password");
     }
 
     const existingUser = await prismadb.user.findUnique({
@@ -98,7 +116,7 @@ export async function register(req: Request, res: Response) {
     });
 
     if (existingUser) {
-      return res.status(403).json({ message: "User already exists" }).end();
+      return res.status(403).json({ message: "User already exists" });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -109,7 +127,6 @@ export async function register(req: Request, res: Response) {
         name,
         email,
         password: hashedPassword,
-        emailVerified: new Date(),
       },
     });
 
@@ -123,13 +140,17 @@ export async function register(req: Request, res: Response) {
     return res.status(201).json({ user });
   } catch (error) {
     console.log("[REGISTER]:", error);
-    res.status(500).end();
+    res.status(500).json({ message: "Internal Server Error" });
   }
 }
 
 export async function verifyEmail(req: Request, res: Response) {
   try {
-    const { code } = req.body;
+    const { code }: { code: string } = req.body;
+
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ message: 'Invalid verification code' });
+    }
 
     const existingToken = await prismadb.verificationToken.findUnique({
       where: {
@@ -138,13 +159,13 @@ export async function verifyEmail(req: Request, res: Response) {
     });
 
     if (!existingToken) {
-      return res.status(403).json({ message: "Invalid Token" }).end();
+      return res.status(403).json({ message: "Invalid Token" });
     }
 
     const hasExpired = new Date(existingToken?.expires) < new Date();
 
     if (hasExpired) {
-      return res.status(403).json({ message: "Token has expired" }).end();
+      return res.status(403).json({ message: "Token has expired" });
     }
 
     const existingUser = await prismadb.user.findUnique({
@@ -153,7 +174,7 @@ export async function verifyEmail(req: Request, res: Response) {
       },
     });
 
-    await prismadb.user.update({
+  await prismadb.user.update({
       where: {
         id: existingUser.id,
       },
@@ -169,15 +190,21 @@ export async function verifyEmail(req: Request, res: Response) {
         email: existingToken?.email,
       },
     });
+
+    return res.status(200).json({ status: "success", message: "Email verified!" });
   } catch (error) {
     console.log("[VERIFY_EMAIL]:", error);
-    res.status(500).end();
+    res.status(500).json({ message: "Internal Server Error" });
   }
 }
 
 export async function resendEmailVerification(req: Request, res: Response) {
   try {
-    const { email } = req.body;
+    const { email }: { email: string; } = req.body;
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ message: 'Invalid field' });
+    }
 
     const existingUser = await prismadb.user.findUnique({
       where: {
@@ -185,8 +212,8 @@ export async function resendEmailVerification(req: Request, res: Response) {
       },
     });
 
-    if (!existingUser || existingUser?.email) {
-      return res.status(404).json({ message: "Nonexistent User!" }).end();
+    if (!existingUser || !existingUser?.email) {
+      return res.status(404).json({ message: "Nonexistent User!" });
     }
 
     const verificationToken = await generateVerificationToken(
@@ -197,15 +224,22 @@ export async function resendEmailVerification(req: Request, res: Response) {
       verificationToken?.email,
       verificationToken?.token
     );
+
+    return res.status(200).json({ status: "success", message: "Verification email sent!" })
   } catch (error) {
     console.log("[RESEND_VERIFICATION_EMAIL]:", error);
-    res.status(500).end();
+    res.status(500).json({ message: "Internal Server Error" });
   }
 }
 
 export async function forgotPassword(req: Request, res: Response) {
   try {
-    const { email } = req.body;
+    const { email }: { email: string; } = req.body;
+
+    
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ message: 'Invalid field' });
+    }
 
     const existingUser = await prismadb.user.findUnique({
       where: {
@@ -214,41 +248,51 @@ export async function forgotPassword(req: Request, res: Response) {
     });
 
     if (!existingUser || !existingUser.email) {
-      return res.status(404).json({ message: "Nonexistent User!" }).end();
+      return res.status(404).json({ message: "Nonexistent User!" });
     }
 
     const generatedToken = await generatePasswordResetToken(
       existingUser?.email
     );
 
-    await sendPasswordResetEmail(generatedToken?.email, generatedToken?.token);
+    await sendPasswordResetEmail(generatedToken.email, generatedToken.token);
 
     return res.status(200).json({
-      message: "Email has been sent!",
+      status: "success",
+      message: "Reset token email has been sent!",
     });
-  } catch (error) {}
+  } catch (error) {
+    console.log("[FORGOT_PASSWORD]:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 }
 
 export async function resetPassword(req: Request, res: Response) {
   try {
-    const { email, password, password_confirmation } = req.body;
+    const { code, password, password_confirmation }: { code: string; password: string; password_confirmation: string; } = req.body;
 
-    const existingUser = await prismadb.user.findUnique({
-      where: {
-        email,
-      },
-    });
-
-    if (!existingUser || !existingUser.email) {
-      return res.status(404).json({ message: "Nonexistent User!" }).end();
-    }
-
-    if (!password || !password_confirmation) {
-      return res.status(400).json({ message: "Invalid Input!" });
+    if (!password || !password_confirmation || !code) {
+      return res.status(400).json({ message: "Invalid field!" });
     }
 
     if (password !== password_confirmation) {
       return res.status(400).json({ message: "Password do not match!" });
+    }
+
+    const existingToken = await prismadb.passwordResetToken.findUnique({
+      where: {
+        token: code,
+      },
+    });
+
+    if (!existingToken) {
+      return res.status(403).json({ message: "Invalid Token" });
+    }
+
+    const hasExpired = new Date(existingToken?.expires) < new Date();
+
+    if (hasExpired) {
+      return res.status(403).json({ message: "Token has expired" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -256,12 +300,17 @@ export async function resetPassword(req: Request, res: Response) {
     await prismadb.user.update({
       data: {
         password: hashedPassword,
+        email: existingToken?.email,
       },
       where: {
-        id: existingUser?.id,
-        email: existingUser?.email,
+        email: existingToken?.email,
       },
     });
+
+    await prismadb.passwordResetToken.delete({where: {
+        token: existingToken.token,
+      }
+    })
 
     return res.status(200).json({
       status: "success",
@@ -269,6 +318,59 @@ export async function resetPassword(req: Request, res: Response) {
     });
   } catch (error) {
     console.log("[RESET_PASSWORD]:", error);
-    res.status(500).end();
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function refreshAccessToken(req: Request, res: Response) {
+  try {
+    const { refresh_token } = req.body;
+
+    if (!refresh_token) {
+      return res.status(401).json({ message: 'Refresh token is required' });
+    }
+
+    // Verify the refresh token
+    let payload: any = null;
+    try {
+      payload = jwt.verify(refresh_token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(403).json({ message: 'Invalid refresh token' });
+    }
+
+    // Check if the refresh token is still valid
+    const existingUser = await prismadb.user.findUnique({
+      where: {
+        id: payload.id,
+      },
+    });
+
+    if (!existingUser) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+
+    // Generate a new access token
+    const access_token = jwt.sign(
+      {
+        email: existingUser.email,
+        id: existingUser.id,
+        role: existingUser.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    await prismadb.user.update({
+      data: {
+        access_token,
+      }, where: {
+        id: existingUser.id,
+      }
+    })
+
+    return res.status(200).json({ status: "success", message: "Access token refreshed!" });
+  } catch (error) {
+    console.log('[REFRESH_ACCESS_TOKEN]:', error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 }

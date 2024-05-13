@@ -9,7 +9,7 @@ interface User {
 
 export const isOwner = (req: Request, res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.token as string;
+    const authHeader = req.headers.authorization;
 
     if (!authHeader) {
       return res.status(403).json({ message: "Invalid authentication!" }).end();
@@ -22,7 +22,7 @@ export const isOwner = (req: Request, res: Response, next: NextFunction) => {
       }
 
       req.user = user;
-      console.log("[USER_MIDDLEWARE]:", req.user);
+      // console.log("[USER_MIDDLEWARE]:", req.user);
       next();
     });
   } catch (error) {

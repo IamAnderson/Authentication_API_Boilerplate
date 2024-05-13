@@ -1,8 +1,11 @@
+import { generateRandom6DigitNumber } from "../../hooks/generate6digits";
 import { prismadb } from "../../../src/index";
 import { v4 as uuidv4 } from "uuid";
 
 export const generateVerificationToken = async (email: string) => {
-  const token = uuidv4();
+  // const token = uuidv4();
+
+  const token = generateRandom6DigitNumber();
 
   const expires = new Date(new Date().getTime() + 3600 * 1000);
 
@@ -32,7 +35,9 @@ export const generateVerificationToken = async (email: string) => {
 };
 
 export const generatePasswordResetToken = async (email: string) => {
-  const token = uuidv4();
+  // const token = uuidv4();
+
+  const token = generateRandom6DigitNumber();
 
   const expires = new Date(new Date().getTime() + 3600 * 1000);
 

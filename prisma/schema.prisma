@@ -7,8 +7,9 @@ generator client {
 
 // prisma/schema.prisma
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  relationMode = "foreignKeys"
 }
 
 enum UserRole {
@@ -25,8 +26,7 @@ model User {
   password      String?
   role          UserRole  @default(USER)
   accounts      Account[]
-  isTwoFactorEnabled Boolean @default(false)
-  // twoFactorConfirmation TwoFactorConfirmation?
+  access_token  String?
 }
 
 model Account {
@@ -44,8 +44,6 @@ model Account {
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
 }
 
 model VerificationToken {

@@ -39,6 +39,7 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+//OAUTH 
 passport.use(
   new GoogleStrategy(
     {
@@ -211,6 +212,7 @@ app.post("/auth/callback", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 app.use("/api", router());
 

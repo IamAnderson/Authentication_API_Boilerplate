@@ -27,5 +27,3 @@ const Array = [
 ];
 
 const Arr_Obj = Array?.forEach((item) => (item.text))
-
-console.log(Arr_Obj);
